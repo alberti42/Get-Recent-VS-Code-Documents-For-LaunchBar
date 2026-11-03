@@ -1,11 +1,15 @@
 name: Verify Published Release
 
 # Checks the Get-Recent-VS-Code-Documents-For-LaunchBar.zip attached to the latest published release — the file
-# users download:
+# users download — the way a user's Mac would:
 #   1. Build provenance: the ZIP was built by draft-release.yml from a tag.
-#   2. Each .lbaction bundle: its Info.plist is valid, and its script runs.
+#   2. The .lbaction bundle: signature (which seals default.py) and team,
+#      notarization, and Gatekeeper accepts it as "Notarized Developer ID".
+#   3. Contents: CFBundleVersion matches the tag, and default.py is executable.
 #
-# Runs weekly, when a release is published, and on demand. Needs no secrets.
+# Runs weekly, when a release is published, and on demand. A check can fail with
+# no new release, for example if Apple revokes the certificate or the ticket.
+# Needs no secrets.
 
 on:
   schedule:
@@ -24,6 +28,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO:     ${{ github.repository }}
+      TEAM_ID:  9V3X7C8VCK
 
     steps:
       - name: Download the latest release
@@ -45,16 +50,30 @@ jobs:
             --signer-workflow "$REPO/.github/workflows/draft-release.yml" \
             --source-ref "refs/tags/$TAG"
 
-      - name: Extract the actions
+      - name: Extract the action
         run: ditto -x -k Get-Recent-VS-Code-Documents-For-LaunchBar.zip extracted
 
-      - name: Check each action bundle
+      - name: Verify the action bundle (signature, notarization, Gatekeeper)
         run: |
           for BUNDLE in extracted/*.lbaction; do
-            plutil -lint "$BUNDLE/Contents/Info.plist"
-            SCRIPT=$(plutil -extract LBScripts.LBDefaultScript.LBScriptName raw "$BUNDLE/Contents/Info.plist")
-            # The runner has no VS Code storage.json; the script prints [] and exits 0.
-            OUT=$("$BUNDLE/Contents/Scripts/$SCRIPT")
+            codesign --verify --strict --deep --verbose=2 "$BUNDLE"
+            TEAM=$(codesign -dv "$BUNDLE" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            echo "TeamIdentifier: $TEAM"
+            test "$TEAM" = "$TEAM_ID"
+            codesign --verify --strict --check-notarization -R="notarized" --verbose "$BUNDLE"
+            # --type open: what Gatekeeper checks when you double-click the action.
+            # --type execute answers "does not seem to be an app" for an .lbaction.
+            OUT=$(spctl --assess --type open --context context:primary-signature --verbose=4 "$BUNDLE" 2>&1 || true)
             echo "$OUT"
-            test "$OUT" = "[]"
+            echo "$OUT" | grep -q "source=Notarized Developer ID"
           done
+
+      - name: Check the contents
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          BUNDLE="extracted/Recent VS Code Opened Files.lbaction"
+          V=$(plutil -extract CFBundleVersion raw "$BUNDLE/Contents/Info.plist")
+          echo "CFBundleVersion: $V"
+          test "$V" = "${TAG#v}"
+          test -x "$BUNDLE/Contents/Scripts/default.py"

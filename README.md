@@ -1,6 +1,7 @@
 # Get Recent Visual Studio Code Documents for LaunchBar
 
 [![made for LaunchBar](https://img.shields.io/badge/made%20for-LaunchBar-blue)](https://www.obdev.at/products/launchbar/index.html)
+[![notarized download](https://img.shields.io/github/actions/workflow/status/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/verify-release.yml?label=notarized%20download&logo=apple)](https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/actions/workflows/verify-release.yml)
 [![license](https://img.shields.io/github/license/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar)](LICENSE)
 
 This repository provides an action for [LaunchBar](https://www.obdev.at/products/launchbar/actions.html) for accessing recent documents opened with [Visual Studio Code](https://code.visualstudio.com/). The actions are designed to streamline access to recent files for users of Visual Studio Code.
@@ -11,7 +12,7 @@ This repository provides an action for [LaunchBar](https://www.obdev.at/products
 
 This repository includes the following components:
 
-- **Action**: Pre-packaged LaunchBar action in `Get-Recent-VS-Code-Documents-For-LaunchBar.zip`, attached to each [release](https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/releases), to enable direct access to recent documents. The bundle is in `Actions/`.
+- **Action**: Pre-packaged LaunchBar action in `Get-Recent-VS-Code-Documents-For-LaunchBar.zip`, attached to each [release](https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/releases), to enable direct access to recent documents. The bundle without the compiled executable is in `Actions/`.
 
 ## Installation
 
@@ -33,15 +34,19 @@ Alternatively, you can simply double-click each `.lbaction` file. This will auto
 
 ## Compilation Instructions
 
-The action runs the Python script `Contents/Scripts/default.py` and contains no compiled code, so there is nothing to compile. Requirements: `python3`.
+Compilation from the source code is not necessary if you simply plan to use the action. The action in the released `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` is signed with a Developer ID and notarized by Apple. Requirements: Xcode or the Xcode Command Line Tools.
 
-1. **Pack** the action:
+1. **Build** the action:
    ```
    bin/build_actions.sh
    ```
-   The script copies the bundle from `Actions/` to `build/Actions/`, without `__pycache__` and `.DS_Store`, and packs it into `build/Get-Recent-VS-Code-Documents-For-LaunchBar.zip`.
+   The script copies the files of `Actions/Recent VS Code Opened Files.lbaction` that git tracks to `build/Actions/`, compiles `Stub/main.c` for arm64 and x86_64 into the bundle's `Contents/MacOS/RecentVSCodeDocuments`, signs the bundle, and packs it into `build/Get-Recent-VS-Code-Documents-For-LaunchBar.zip`. Without an argument it signs ad hoc. To sign with a Developer ID, give the identity as argument:
+   ```
+   bin/build_actions.sh "Developer ID Application: Your Name (TEAMID)"
+   ```
+   LaunchBar runs `Contents/Scripts/default.py`, not the compiled program. The program is the bundle's executable so that the bundle's signature, which seals `default.py`, can be notarized: Apple's notary service issues tickets only for compiled code.
 
-2. **Install** the action by double-clicking the bundle in `build/Actions/`, or copy it to:
+2. **Install** the built action by double-clicking `build/Actions/Recent VS Code Opened Files.lbaction`, or copy it to:
    ```
    ~/Library/Application Support/LaunchBar/Actions
    ```
@@ -52,8 +57,8 @@ The action runs the Python script `Contents/Scripts/default.py` and contains no 
 
 1. Describe the changes under `## [Unreleased]` in `CHANGELOG.md` (Keep a Changelog 1.1.0).
 2. `bin/bump_version.sh vX.Y.Z` (or `vX.Y.Z-beta.N`): sets `CFBundleVersion` in `Actions/*.lbaction/Contents/Info.plist`, moves the `[Unreleased]` entries under the version with `bin/changelog.py` (releases only), commits and tags.
-3. `git push origin main --tags`. The tag starts `.github/workflows/draft-release.yml`: pack the action, attest the build provenance of `Get-Recent-VS-Code-Documents-For-LaunchBar.zip`, and create a draft release with `Get-Recent-VS-Code-Documents-For-LaunchBar.zip`. The release notes are the version's `CHANGELOG.md` section and a link to the commits since the previous tag. The workflow fails if the tag does not match `CFBundleVersion`.
-4. Publish the draft on GitHub. `.github/workflows/verify-release.yml` then checks the published `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` (provenance, Info.plist, script); it also runs weekly.
+3. `git push origin main --tags`. The tag starts `.github/workflows/draft-release.yml`: build with the Developer ID, notarize `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` with `notarytool`, attest its build provenance, and create a draft release with `Get-Recent-VS-Code-Documents-For-LaunchBar.zip`. The release notes are the version's `CHANGELOG.md` section and a link to the commits since the previous tag. The workflow fails if the tag does not match `CFBundleVersion`.
+4. Publish the draft on GitHub. `.github/workflows/verify-release.yml` then checks the published `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` (provenance, signature, team, notarization); it also runs weekly.
 
 To verify a downloaded `Get-Recent-VS-Code-Documents-For-LaunchBar.zip`:
 ```

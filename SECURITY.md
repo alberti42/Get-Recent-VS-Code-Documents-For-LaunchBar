@@ -20,10 +20,17 @@ Include the version of the action (`CFBundleVersion` in the action's `Contents/I
 
   From each entry the script takes the document's path (`uri` → `path`) and prints the documents (name, folder and path) as JSON to LaunchBar. It does not open the documents. If the file is missing or has a different format, it prints an empty list.
 - The script writes no file and makes no network connection.
-- The action in a release is packed by GitHub Actions from the tagged source. It contains no compiled code and is not signed. `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` carries a build provenance attestation. To check where a downloaded `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` was built:
+- The action in a release is built by GitHub Actions from the tagged source. The `.lbaction` bundle is signed with a Developer ID with the hardened runtime and notarized by Apple; the signature seals `default.py`. The bundle's executable, `Contents/MacOS/RecentVSCodeDocuments`, is a small program compiled from `Stub/main.c` that does nothing; LaunchBar does not run it. Gatekeeper fetches the notarization ticket online the first time you open the action. `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` carries a build provenance attestation. To check where a downloaded `Get-Recent-VS-Code-Documents-For-LaunchBar.zip` was built:
 
   ```sh
   gh attestation verify Get-Recent-VS-Code-Documents-For-LaunchBar.zip --repo alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar
   ```
 
   The attestation names the workflow (`.github/workflows/draft-release.yml`), the tag and the commit the ZIP was built from.
+- To check a downloaded action before you install it:
+
+  ```sh
+  spctl --assess --type open --context context:primary-signature --verbose "Recent VS Code Opened Files.lbaction"
+  ```
+
+  Gatekeeper answers `accepted` and `source=Notarized Developer ID`.

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS reported that Apple could not verify the action when it was opened from a browser download. The action is now signed with a Developer ID and notarized by Apple. The bundle contains a small executable, `Contents/MacOS/RecentVSCodeDocuments`, that LaunchBar does not run; it carries the signature, which seals `default.py`.
+
 ## [1.0.0] - 2026-11-03
 
 ### Fixed

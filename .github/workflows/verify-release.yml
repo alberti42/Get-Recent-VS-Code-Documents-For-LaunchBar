@@ -1,0 +1,60 @@
+name: Verify Published Release
+
+# Checks the Get-Recent-VS-Code-Documents-For-LaunchBar.zip attached to the latest published release — the file
+# users download:
+#   1. Build provenance: the ZIP was built by draft-release.yml from a tag.
+#   2. Each .lbaction bundle: its Info.plist is valid, and its script runs.
+#
+# Runs weekly, when a release is published, and on demand. Needs no secrets.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays, 06:00 UTC
+  release:
+    types: [released]
+  workflow_dispatch:
+
+permissions:
+  contents: read       # download the release asset
+  attestations: read   # read the build provenance attestation
+
+jobs:
+  verify:
+    runs-on: macos-26
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO:     ${{ github.repository }}
+
+    steps:
+      - name: Download the latest release
+        id: rel
+        run: |
+          # Without a tag, gh picks the latest release: not a draft, not a pre-release.
+          TAG=$(gh release view --repo "$REPO" --json tagName -q .tagName)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          gh release download "$TAG" --repo "$REPO" --pattern Get-Recent-VS-Code-Documents-For-LaunchBar.zip
+          shasum -a 256 Get-Recent-VS-Code-Documents-For-LaunchBar.zip
+          echo "Latest release: $TAG"
+
+      - name: Verify build provenance
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          gh attestation verify Get-Recent-VS-Code-Documents-For-LaunchBar.zip \
+            --repo "$REPO" \
+            --signer-workflow "$REPO/.github/workflows/draft-release.yml" \
+            --source-ref "refs/tags/$TAG"
+
+      - name: Extract the actions
+        run: ditto -x -k Get-Recent-VS-Code-Documents-For-LaunchBar.zip extracted
+
+      - name: Check each action bundle
+        run: |
+          for BUNDLE in extracted/*.lbaction; do
+            plutil -lint "$BUNDLE/Contents/Info.plist"
+            SCRIPT=$(plutil -extract LBScripts.LBDefaultScript.LBScriptName raw "$BUNDLE/Contents/Info.plist")
+            # The runner has no VS Code storage.json; the script prints [] and exits 0.
+            OUT=$("$BUNDLE/Contents/Scripts/$SCRIPT")
+            echo "$OUT"
+            test "$OUT" = "[]"
+          done

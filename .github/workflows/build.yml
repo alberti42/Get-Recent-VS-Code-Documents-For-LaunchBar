@@ -1,0 +1,36 @@
+name: Build
+
+# Packs the action on every push to main and every pull request, and runs its
+# script. Needs no secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show toolchain
+        run: /usr/bin/env python3 --version
+
+      - name: Pack the action
+        run: bin/build_actions.sh
+
+      - name: Check the action
+        run: |
+          for BUNDLE in build/Actions/*.lbaction; do
+            SCRIPT=$(plutil -extract LBScripts.LBDefaultScript.LBScriptName raw "$BUNDLE/Contents/Info.plist")
+            # LaunchBar runs Contents/Scripts/<LBScriptName>. The runner has no
+            # VS Code storage.json; the script prints [] and exits 0.
+            OUT=$("$BUNDLE/Contents/Scripts/$SCRIPT")
+            echo "$OUT"
+            test "$OUT" = "[]"
+          done

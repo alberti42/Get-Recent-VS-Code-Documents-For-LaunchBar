@@ -1,0 +1,132 @@
+name: Build and Draft Release
+
+# Triggered when a vX.Y.Z or vX.Y.Z-beta.N tag is pushed (created by bin/bump_version.sh).
+# A -beta.N tag creates a draft pre-release.
+# Pipeline:
+#   1. Pack the action into Get-Recent-VS-Code-Documents-For-LaunchBar.zip with bin/build_actions.sh.
+#      The action runs a Python script and contains no compiled code; it is not signed.
+#   2. Attest build provenance for the ZIP (Sigstore, verifiable with gh attestation verify)
+#   3. Create a draft GitHub release with the ZIP attached
+#
+# Publishing the draft is a manual step on GitHub. verify-release.yml then
+# checks the published ZIP. Needs no secrets.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+'
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write           # needed to create the release
+      id-token: write           # needed by actions/attest to request a Sigstore certificate
+      attestations: write       # needed by actions/attest to store the attestation
+      artifact-metadata: write  # needed by actions/attest to create the artifact storage record
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # ── Version info ──────────────────────────────────────────────────────────
+      - name: Extract version info
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"                          # e.g. v1.1.0 or v1.1.0-beta.1
+          SHORT="${TAG#v}"                                  # e.g. 1.1.0 or 1.1.0-beta.1
+          BASE="${SHORT%%-*}"                               # e.g. 1.1.0
+          if [[ "$SHORT" == *-* ]]; then PRERELEASE=true; else PRERELEASE=false; fi
+          # bin/bump_version.sh writes the version into the Info.plist before tagging.
+          for PLIST in Actions/*.lbaction/Contents/Info.plist; do
+            V=$(plutil -extract CFBundleVersion raw "$PLIST")
+            if [[ "$V" != "$BASE" ]]; then
+              echo "ERROR: tag $TAG does not match CFBundleVersion $V in $PLIST"
+              exit 1
+            fi
+          done
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "zip=build/Get-Recent-VS-Code-Documents-For-LaunchBar.zip" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Version ${SHORT}"
+
+      # ── Build ─────────────────────────────────────────────────────────────────
+      - name: Pack the action
+        run: bin/build_actions.sh
+
+      - name: Check the action
+        run: |
+          for BUNDLE in build/Actions/*.lbaction; do
+            SCRIPT=$(plutil -extract LBScripts.LBDefaultScript.LBScriptName raw "$BUNDLE/Contents/Info.plist")
+            # The runner has no VS Code storage.json; the script prints [] and exits 0.
+            OUT=$("$BUNDLE/Contents/Scripts/$SCRIPT")
+            echo "$OUT"
+            test "$OUT" = "[]"
+          done
+
+      # ── Build provenance ──────────────────────────────────────────────────────
+      # Records a signed SLSA provenance statement: this ZIP (by its SHA-256) was
+      # built by this workflow, from this commit and tag. To verify a downloaded ZIP:
+      #   gh attestation verify Get-Recent-VS-Code-Documents-For-LaunchBar.zip --repo alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.ver.outputs.zip }}
+
+      # ── Draft release ─────────────────────────────────────────────────────────
+      - name: Resolve previous tag
+        id: prev
+        run: |
+          # The nearest tag before this one in the history. A release skips
+          # pre-release tags, so its comparison covers its pre-releases too;
+          # a pre-release compares against the previous tag of either kind.
+          # Empty for the first tag.
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          else
+            PREV=$(git describe --tags --abbrev=0 --exclude '*-*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          fi
+          echo "tag=${PREV}" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${PREV:-none}"
+
+      - name: Build release notes
+        env:
+          PREV_TAG: ${{ steps.prev.outputs.tag }}
+          CURR_TAG: ${{ steps.ver.outputs.tag }}
+          REPO:     ${{ github.repository }}
+        run: |
+          # The notes are this version's CHANGELOG.md section; a pre-release uses
+          # [Unreleased], where its changes stay until the release. They end with
+          # the compare link, which lists the commits since the previous tag.
+          SHORT="${CURR_TAG#v}"
+          if [[ "$SHORT" == *-* ]]; then SECTION=Unreleased; else SECTION="$SHORT"; fi
+          ENTRY=$(python3 bin/changelog.py section "$SECTION" || true)
+          if [[ -n "$PREV_TAG" ]]; then
+            LINK="**Full Changelog**: https://github.com/${REPO}/compare/${PREV_TAG}...${CURR_TAG}"
+          else
+            LINK="**Full Changelog**: https://github.com/${REPO}/commits/${CURR_TAG}"
+          fi
+          {
+            if [[ -n "$ENTRY" ]]; then printf '%s\n\n' "$ENTRY"; fi
+            printf '%s\n' "$LINK"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG:      ${{ steps.ver.outputs.tag }}
+          ZIP:      ${{ steps.ver.outputs.zip }}
+          PRERELEASE: ${{ steps.ver.outputs.prerelease }}
+        run: |
+          PRERELEASE_FLAG=()
+          [[ "$PRERELEASE" == true ]] && PRERELEASE_FLAG=(--prerelease)
+          gh release create "$TAG" \
+            --draft "${PRERELEASE_FLAG[@]}" \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            "$ZIP"

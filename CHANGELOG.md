@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-03
+
 ### Fixed
 
 - macOS reported that Apple could not verify the action when it was opened from a browser download. The action is now signed with a Developer ID and notarized by Apple. The bundle contains a small executable, `Contents/MacOS/RecentVSCodeDocuments`, that LaunchBar does not run; it carries the signature, which seals `default.py`.
@@ -25,5 +27,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `open_with_sublime.py`, which the action never ran, and the compiled `__pycache__` folder.
 
-[Unreleased]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/releases/tag/v1.0.0

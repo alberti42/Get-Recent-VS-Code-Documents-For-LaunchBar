@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-03
+
 ### Fixed
 
 - LaunchBar described the action as a list of Sublime Text files; it now names Visual Studio Code.
@@ -19,4 +21,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `open_with_sublime.py`, which the action never ran, and the compiled `__pycache__` folder.
 
-[Unreleased]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/commits/main
+[Unreleased]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/alberti42/Get-Recent-VS-Code-Documents-For-LaunchBar/releases/tag/v1.0.0

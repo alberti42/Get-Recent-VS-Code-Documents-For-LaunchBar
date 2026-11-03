@@ -8,6 +8,8 @@
 	<string>Alberti42.LaunchBar.action.RecentVSCodeDocuments</string>
 	<key>CFBundleName</key>
 	<string>Recent VS Code Opened Files</string>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
 	<key>LBAssociatedApplication</key>
 	<string>com.microsoft.VSCode</string>
 	<key>LBDescription</key>
